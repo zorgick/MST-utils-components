@@ -1,7 +1,7 @@
 {
-  "name": "mst-reference-for-select-field",
+  "name": "mst-select-field-with-reference",
   "version": "1.0.0",
-  "description": "Mobx-state-tree and material-ui solution for selectors based on reference and map",
+  "description": "Ready solution using mobx state tree and material ui for dynamic select and textfield fields",
   "keywords": [],
   "main": "index.js",
   "dependencies": {

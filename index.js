@@ -1,6 +1,6 @@
 import React from "react";
 import { render } from "react-dom";
-import { types } from "mobx-state-tree";
+import { types, onPatch } from "mobx-state-tree";
 import { observer } from "mobx-react";
 import FormControl from "@material-ui/core/FormControl";
 import FormHelperText from "@material-ui/core/FormHelperText";
@@ -22,7 +22,6 @@ export const FormField = types
         disabled: types.optional(types.boolean, false),
         required: types.optional(types.boolean, false),
         error: types.maybe(types.string),
-        fieldId: types.string,
         fieldIndex: types.maybe(types.string),
         values: types.optional(types.array(FormValue), []),
         singleValue: types.optional(types.string, ""),
@@ -49,14 +48,13 @@ const RootStore = types
     .views((self) => ({
         get fieldIds() {
             const fieldIds = [];
-            self.formValues.forEach(({ fieldId, fieldIndex }) => {
-                if (fieldId) {
+            self.formValues.forEach(({ id, fieldIndex }) => {
+                if (id) {
                     if (fieldIndex) {
-                        fieldIds.splice(fieldIndex, 0, fieldId)
+                        fieldIds.splice(fieldIndex, 0, id);
                     } else {
-                        fieldIds.push(fieldId)
+                        fieldIds.push(id);
                     }
-
                 }
             });
 
@@ -64,9 +62,9 @@ const RootStore = types
         },
         get hasFields() {
             const fieldIds = [];
-            self.formValues.forEach(({ fieldId }) => {
-                if (fieldId) {
-                    fieldIds.push(fieldId);
+            self.formValues.forEach(({ id }) => {
+                if (id) {
+                    fieldIds.push(id);
                 }
             });
 
@@ -74,14 +72,12 @@ const RootStore = types
         }
     }))
     .actions((self) => ({
-        
         afterCreate() {
             self.formValues.set("statusId", {
                 id: "statusId",
                 label: "Статус",
                 disabled: false,
                 required: true,
-                fieldId: "statusId",
                 fieldIndex: "1",
                 values: [
                     { name: "Заебись", value: "zaebis", id: "zaebis" },
@@ -97,7 +93,6 @@ const RootStore = types
             self.formValues.set("description", {
                 id: "description",
                 label: "Описание",
-                fieldId: "description",
                 fieldIndex: "0",
                 singleValue:
                     "Хули тут так мало?! ТЫ на пенек сел, сотку должен!"
@@ -110,6 +105,16 @@ const RootStore = types
 
 const store = RootStore.create({});
 
+onPatch(store.formValues, (patch) => {
+    if (patch.path.includes("statusId")) {
+        if (patch.value.includes("chetko")) {
+            store.changeField("description", "Завораживающе! Превосходно");
+        } else {
+            store.changeField("description", "Ты блять!");
+        }
+    }
+});
+
 export const DetailsSelect = observer(
     ({ field, changeField, inputProps, selectProps }) => {
         const handleDetailsChange = (event) => {
@@ -121,12 +126,12 @@ export const DetailsSelect = observer(
         if (field.values.length > 0) {
             FieldComponent = (
                 <React.Fragment>
-                    <InputLabel id={field.fieldId}>{label}</InputLabel>
+                    <InputLabel id={field.id}>{label}</InputLabel>
                     <Select
-                        id={field.fieldId}
+                        id={field.id}
                         label={label}
-                        labelId={field.fieldId}
-                        name={field.fieldId}
+                        labelId={field.id}
+                        name={field.id}
                         disabled={field.disabled}
                         value={field.selected.value ? field.selected.value : ""}
                         onChange={handleDetailsChange}
@@ -143,10 +148,10 @@ export const DetailsSelect = observer(
         } else {
             FieldComponent = (
                 <TextField
-                    id={field.fieldId}
+                    id={field.id}
                     label={label}
                     value={field.singleValue}
-                    name={field.fieldId}
+                    name={field.id}
                     variant="outlined"
                     disabled={field.disabled}
                     onChange={handleDetailsChange}
@@ -171,17 +176,17 @@ export const DetailsSelect = observer(
 );
 
 const AppView = observer((props) => {
-    console.log('Notice that parent rerenders only fiew times')
+    console.log("Notice that parent rerenders only fiew times");
     return (
         <div>
             {props.store.hasFields &&
-                props.store.fieldIds.map((fieldId) => {
+                props.store.fieldIds.map((id) => {
                     return (
                         <DetailsSelect
                             changeField={props.store.changeField}
-                            field={props.store.formValues.get(fieldId)}
-                            key={fieldId}
-                            {...(fieldId === "description" && {
+                            field={props.store.formValues.get(id)}
+                            key={id}
+                            {...(id === "description" && {
                                 inputProps: {
                                     multiline: true,
                                     rows: 4,
