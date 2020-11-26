@@ -1,6 +1,6 @@
 import React from "react";
 import { render } from "react-dom";
-import { types, onPatch } from "mobx-state-tree";
+import { types, cast, flow } from "mobx-state-tree";
 import { observer } from "mobx-react";
 import FormControl from "@material-ui/core/FormControl";
 import FormHelperText from "@material-ui/core/FormHelperText";
@@ -25,25 +25,58 @@ export const FormField = types
         fieldIndex: types.maybe(types.string),
         values: types.optional(types.array(FormValue), []),
         singleValue: types.optional(types.string, ""),
-        selected: types.maybe(types.reference(types.late(() => FormValue)))
+        selected: types.maybe(types.reference(types.late(() => FormValue))),
+        // if the field has a dependent field assign it on a initialisation
+        next: types.maybeNull(types.reference(types.late(() => FormField)))
     })
+    .volatile((self) => ({
+        updateFunc: undefined
+    }))
     .actions((self) => ({
         setSelection(selected) {
+            // selection of multiple values is possible
+            // only when array of values has items
             if (self.values.length > 0) {
                 if (!selected) {
                     self.selected = undefined;
                 } else {
                     self.selected = selected;
+
+                    // if (self.next) {
+                    //   self.next.updateValues({ id: selected });
+                    //}
                 }
             } else {
                 self.singleValue = selected;
             }
         }
+    }))
+    .actions((self) => ({
+        setUpdateFunc(updateFunc) {
+            if (typeof updateFunc !== "function") {
+                throw new Error(
+                    "It looks like you provided something else instead of function"
+                );
+            }
+            self.updateFunc = updateFunc;
+        },
+        updateValues: flow(function* (params) {
+            if (self.selected) {
+                self.selected = undefined;
+            }
+            if (!self.disabled) {
+                self.disabled = true;
+            }
+            const newValues = yield self.updateFunc(params);
+            self.values = cast(newValues);
+            self.disabled = false;
+        })
     }));
 
 const RootStore = types
     .model({
-        formValues: types.map(FormField)
+        formValues: types.map(FormField),
+        newValues: types.optional(types.array(types.string), [])
     })
     .views((self) => ({
         get fieldIds() {
@@ -72,6 +105,31 @@ const RootStore = types
         }
     }))
     .actions((self) => ({
+        getData: flow(function* ({ id }) {
+            yield new Promise((resolve) => {
+                setTimeout(resolve, 3000);
+            }).then((result) => {});
+            const values = [
+                {
+                    id: "tamada",
+                    value: "tamada",
+                    name: "Хороший тамада! И конкурсы интересные"
+                },
+                {
+                    id: "opyat",
+                    value: "opyat",
+                    name: "Никогда такого не было! И вот опять!"
+                },
+                {
+                    id: "musk",
+                    value: "musk",
+                    name: "Как тебе такое Илон Маск?!"
+                }
+            ];
+            return values;
+        })
+    }))
+    .actions((self) => ({
         afterCreate() {
             self.formValues.set("statusId", {
                 id: "statusId",
@@ -90,6 +148,7 @@ const RootStore = types
                 ],
                 selected: "pazani"
             });
+            self.formValues.get("statusId").setUpdateFunc(self.getData);
             self.formValues.set("description", {
                 id: "description",
                 label: "Описание",
@@ -104,16 +163,6 @@ const RootStore = types
     }));
 
 const store = RootStore.create({});
-
-onPatch(store.formValues, (patch) => {
-    if (patch.path.includes("statusId")) {
-        if (patch.value.includes("chetko")) {
-            store.changeField("description", "Завораживающе! Превосходно");
-        } else {
-            store.changeField("description", "Ты блять!");
-        }
-    }
-});
 
 export const DetailsSelect = observer(
     ({ field, changeField, inputProps, selectProps }) => {
@@ -133,7 +182,11 @@ export const DetailsSelect = observer(
                         labelId={field.id}
                         name={field.id}
                         disabled={field.disabled}
-                        value={field.selected.value ? field.selected.value : ""}
+                        value={
+                            field.selected && field.selected.value
+                                ? field.selected.value
+                                : ""
+                        }
                         onChange={handleDetailsChange}
                         {...selectProps}
                     >
@@ -179,23 +232,36 @@ const AppView = observer((props) => {
     console.log("Notice that parent rerenders only fiew times");
     return (
         <div>
-            {props.store.hasFields &&
-                props.store.fieldIds.map((id) => {
-                    return (
-                        <DetailsSelect
-                            changeField={props.store.changeField}
-                            field={props.store.formValues.get(id)}
-                            key={id}
-                            {...(id === "description" && {
-                                inputProps: {
-                                    multiline: true,
-                                    rows: 4,
-                                    rowsMax: 18
-                                }
-                            })}
-                        />
-                    );
-                })}
+            <div>
+                {props.store.hasFields &&
+                    props.store.fieldIds.map((id) => {
+                        return (
+                            <DetailsSelect
+                                changeField={props.store.changeField}
+                                field={props.store.formValues.get(id)}
+                                key={id}
+                                {...(id === "description" && {
+                                    inputProps: {
+                                        multiline: true,
+                                        rows: 4,
+                                        rowsMax: 18
+                                    }
+                                })}
+                            />
+                        );
+                    })}
+            </div>
+            {props.store.hasFields && (
+                <button
+                    onClick={() =>
+                        props.store.formValues
+                            .get("statusId")
+                            .updateValues({ id: undefined })
+                    }
+                >
+                    Update select values
+                </button>
+            )}
         </div>
     );
 });
